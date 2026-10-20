@@ -11,9 +11,9 @@ class Ticket(BaseModel):
         extra="forbid",
         strict=True
     )
-    ticket_id: str = Field(min_length=1)
-    subject: str = Field(min_length=1)
-    description: str = Field(min_length=1)
+    ticket_id: str = Field(min_length=1, max_length=128)
+    subject: str = Field(min_length=1, max_length=256)
+    description: str = Field(min_length=1, max_length=16000)
 
 class Category(str, Enum):
     BUG = "BUG"

@@ -1,0 +1,32 @@
+name: Verify ChaosDesk
+on: [push, pull_request]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ['3.9', '3.11']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - run: pip install -r requirements.lock
+      - run: pip check
+      - run: python -m pytest -q
+      - run: python scripts/smoke_service.py
+      - run: python -m chaosdesk.harness all --output reports/harness.json
+      - run: python -m chaosdesk.loadtest --tickets 60 --workers 4 --latency-ms 30 --rate-limit-every 10 --output reports/load.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verification-${{ matrix.python }}
+          path: reports/*.json
+
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t chaosdesk:ci .

@@ -1,0 +1,49 @@
+x-common: &common
+  build: .
+  image: chaosdesk:local
+  user: "10001:10001"
+  restart: unless-stopped
+  read_only: true
+  init: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  tmpfs: [/tmp:size=32m,mode=1777]
+  volumes: [jobs:/app/var]
+  stop_grace_period: 60s
+  environment: &environment
+    CHAOSDESK_API_TOKEN: ${CHAOSDESK_API_TOKEN:?Generate a service API token}
+    CHAOSDESK_ENVIRONMENT: ${CHAOSDESK_ENVIRONMENT:-production}
+    CHAOSDESK_MODE: ${CHAOSDESK_MODE:-ai}
+    OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    CHAOSDESK_MODEL: ${CHAOSDESK_MODEL:-gpt-4.1-mini}
+    CHAOSDESK_DATABASE: /app/var/chaosdesk.db
+    CHAOSDESK_WORKERS: ${CHAOSDESK_WORKERS:-4}
+    CHAOSDESK_MAX_PENDING: ${CHAOSDESK_MAX_PENDING:-1000}
+    CHAOSDESK_MODEL_REQUESTS_PER_MINUTE: ${CHAOSDESK_MODEL_REQUESTS_PER_MINUTE:-60}
+    CHAOSDESK_MODEL_REQUESTS_PER_DAY: ${CHAOSDESK_MODEL_REQUESTS_PER_DAY:-10000}
+    CHAOSDESK_RETENTION_DAYS: ${CHAOSDESK_RETENTION_DAYS:-7}
+
+services:
+  api:
+    <<: *common
+    ports: ["127.0.0.1:8000:8000"]
+    mem_limit: 512m
+    cpus: 1
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/live', timeout=2)"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+  worker:
+    <<: *common
+    command: [python, -m, chaosdesk.worker]
+    mem_limit: 1g
+    cpus: 2
+    healthcheck:
+      test: [CMD, python, -c, "from chaosdesk.settings import Settings; from chaosdesk.store import JobStore; s=JobStore(Settings.from_env()).stats(); assert s['live_worker_processes'] > 0 and s['expired_leases'] == 0"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  jobs:

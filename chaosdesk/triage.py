@@ -3,7 +3,7 @@ import re
 from pathlib import Path
 
 from chaosdesk.analysis import Analyzer, LocalAnalyzer, suspicious_text
-from chaosdesk.interpreter import TicketInterpreter
+from chaosdesk.interpreter import ProviderError, TicketInterpreter
 from chaosdesk.policies import assess_priority, explain_priority, recommend_action
 from chaosdesk.retrieval import DEFAULT_KB_DIR, retrieve_documents
 from chaosdesk.responses import generate_response
@@ -77,17 +77,20 @@ def select_known_fix(ticket, documents):
 
 class TriageAgent:
     def __init__(self, analyzer: Analyzer = None, kb_dir: Path = DEFAULT_KB_DIR,
-                 retriever=retrieve_documents):
+                 retriever=retrieve_documents, retry_provider_errors=False):
         self.analyzer = analyzer if analyzer is not None else LocalAnalyzer()
         self.kb_dir = Path(kb_dir)
         self.retriever = retriever
+        self.retry_provider_errors = retry_provider_errors
 
     def triage(self, ticket: Ticket) -> TriageDecision:
         problems = []
         try:
             analysis = self.analyzer.analyze(ticket)
             analysis = TicketAnalysis.model_validate(analysis.model_dump())
-        except Exception:
+        except Exception as error:
+            if self.retry_provider_errors and isinstance(error, ProviderError):
+                raise
             logger.warning("tool_failure tool=analysis")
             problems.append("Ticket interpretation failed; human investigation is required.")
             # Preserve only recognized urgent symptoms as a provisional safety floor.

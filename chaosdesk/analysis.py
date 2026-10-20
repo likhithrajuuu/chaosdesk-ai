@@ -4,8 +4,9 @@ import re
 from typing import Protocol
 
 from langchain_openai import ChatOpenAI
+from openai import APIConnectionError, APIStatusError
 
-from chaosdesk.interpreter import INTERPRETER_PROMPT, InterpretationError
+from chaosdesk.interpreter import INTERPRETER_PROMPT, InterpretationError, ProviderError
 from chaosdesk.schemas import Category, PriorityFacts, Ticket, TicketAnalysis
 
 
@@ -24,9 +25,11 @@ def suspicious_text(text: str) -> bool:
 
 
 class AIAnalyzer:
-    def __init__(self, model="gpt-4.1-mini", llm=None):
+    def __init__(self, model="gpt-4.1-mini", llm=None, timeout=30,
+                 max_output_tokens=1500, api_key=None):
         if llm is None:
-            llm = ChatOpenAI(model=model, temperature=0, timeout=30, max_retries=0)
+            llm = ChatOpenAI(model=model, temperature=0, timeout=timeout, max_retries=0,
+                            max_tokens=max_output_tokens, api_key=api_key)
         self._extractor = llm.with_structured_output(
             TicketAnalysis, method="json_schema", strict=True
         )
@@ -51,6 +54,17 @@ Do not invent missing details. No knowledge-base documents have been consulted.
             if isinstance(result, TicketAnalysis):
                 result = result.model_dump()
             return TicketAnalysis.model_validate(result)
+        except APIConnectionError:
+            raise ProviderError(retryable=True) from None
+        except APIStatusError as error:
+            retryable = error.status_code in (408, 409, 429) or error.status_code >= 500
+            if getattr(error, "code", None) == "insufficient_quota":
+                retryable = False
+            try:
+                delay = max(0, min(300, float(error.response.headers.get("retry-after", "0"))))
+            except (ValueError, TypeError):
+                delay = 0
+            raise ProviderError(retryable=retryable, retry_after=delay) from None
         except Exception:
             raise InterpretationError("AI analysis failed or returned invalid data.") from None
 

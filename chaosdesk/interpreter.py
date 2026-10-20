@@ -41,6 +41,15 @@ class InterpretationError(RuntimeError):
     """The AI could not provide valid facts; no assessment should be produced."""
 
 
+class ProviderError(InterpretationError):
+    """Sanitized provider failure with explicit retry policy."""
+
+    def __init__(self, retryable=False, retry_after=0):
+        super().__init__("AI provider request failed.")
+        self.retryable = retryable
+        self.retry_after = retry_after
+
+
 class AIInterpreter:
     """Extract schema-validated facts using OpenAI via LangChain."""
 

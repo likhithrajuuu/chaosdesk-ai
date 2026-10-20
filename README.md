@@ -1,9 +1,12 @@
 # ChaosDesk
 
-A terminal-based support triage agent for fictional SaaS company CloudCrate.
+A support triage agent with a CLI and a durable internal API for fictional SaaS company CloudCrate.
 It produces a validated JSON decision and a response draft. All escalations,
 incident creation, and billing actions are recommendations; nothing is sent or
 changed in a customer account.
+
+For the authenticated service, persistent queue, worker processes, Docker Compose,
+load testing, and deployment procedures, read [the operations guide](docs/operations.md).
 
 ## Quick start
 
@@ -191,6 +194,20 @@ means dataset configuration or report writing failed. Reports are printed as JSO
 on stdout and optionally saved with `--output`; tool diagnostics use stderr.
 The harness CLI is entirely offline. Use the existing
 `python -m chaosdesk.evaluate --mode ai` separately for paid real-model evaluation.
+
+## Service load testing
+
+The load harness exercises HTTP admission, SQLite persistence, bounded workers,
+and retry handling with a simulated model. It makes no external API calls:
+
+```bash
+python -m chaosdesk.loadtest --tickets 100 --workers 4 --latency-ms 50 --rate-limit-every 10 --output reports/load.json
+```
+
+Reports include throughput, end-to-end p50/p95 latency, peak model concurrency,
+attempts, failures, and unfinished jobs. `--max-p95-ms` adds an explicit latency
+gate. These are local pipeline measurements; actual model latency, quotas, and
+costs require a separate controlled evaluation.
 
 ## Current limits
 
