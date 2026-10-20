@@ -1,0 +1,4 @@
+# AI based libraries
+langchain
+langchain-openai
+python-dotenv

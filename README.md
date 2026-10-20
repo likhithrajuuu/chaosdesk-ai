@@ -1,1 +1,2 @@
-# chaosdesk-ai
+# ChaosDesk: Multi-Agent AI Support Command Center
+
