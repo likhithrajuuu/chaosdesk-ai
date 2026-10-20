@@ -15,15 +15,6 @@ class Ticket(BaseModel):
     subject: str = Field(min_length=1)
     description: str = Field(min_length=1)
 
-if __name__ == "__main__":
-    ticket = Ticket(
-        ticket_id="TKT-001",
-        subject="Cannot Log In",
-        description=" "
-    )
-
-# print(ticket.model_dump())
-
 class Category(str, Enum):
     BUG = "BUG"
     BILLING="BILLING"
@@ -97,4 +88,17 @@ class PriorityAssessment(BaseModel):
 
     priority: Priority
     missing_information: List[str]
-    requires_human_review: Optional[bool]
+    requires_human_review: bool
+
+
+class TicketAnalysis(BaseModel):
+    """Interpretation only; priority and action are always chosen by code."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    facts: PriorityFacts
+    # API parsers may supply JSON enum values as strings; keep booleans strict.
+    category: Optional[Category] = Field(strict=False)
+    customer_impact: str = Field(min_length=1)
+    missing_information: List[str]
+    billing_details_present: Optional[bool]

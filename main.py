@@ -1,15 +1,7 @@
-from dotenv import load_dotenv;
-from langchain_openai import ChatOpenAI
+"""Compatibility entry point for the support triage CLI."""
 
-load_dotenv();
+from chaosdesk.cli import main
 
-llm = ChatOpenAI(
-    model="gpt-4.1-mini",
-    temperature=0.2
-)
 
-response = llm.invoke(
-    "Explain dependency injection in java in layman terms"
-)
-
-print(response.content)
+if __name__ == "__main__":
+    raise SystemExit(main())

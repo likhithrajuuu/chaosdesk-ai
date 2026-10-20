@@ -1,0 +1,67 @@
+{
+  "cases": 39,
+  "scores": {
+    "category_accuracy": 1.0,
+    "priority_accuracy": 1.0,
+    "action_accuracy": 1.0,
+    "schema_validity": 1.0,
+    "citation_validity": 1.0,
+    "evidence_recall": 1.0,
+    "invalid_input_rejection": 1.0,
+    "urgent_escalation_accuracy": 1.0,
+    "review_recall": 1.0
+  },
+  "counts": {
+    "category_accuracy": {
+      "passed": 33,
+      "total": 33
+    },
+    "priority_accuracy": {
+      "passed": 33,
+      "total": 33
+    },
+    "action_accuracy": {
+      "passed": 33,
+      "total": 33
+    },
+    "schema_validity": {
+      "passed": 33,
+      "total": 33
+    },
+    "citation_validity": {
+      "passed": 33,
+      "total": 33
+    },
+    "evidence_recall": {
+      "passed": 2,
+      "total": 2
+    },
+    "invalid_input_rejection": {
+      "passed": 6,
+      "total": 6
+    },
+    "urgent_escalation_accuracy": {
+      "passed": 9,
+      "total": 9
+    },
+    "review_recall": {
+      "passed": 32,
+      "total": 32
+    }
+  },
+  "thresholds": {
+    "category_accuracy": 0.9,
+    "priority_accuracy": 0.95,
+    "action_accuracy": 0.9,
+    "schema_validity": 1.0,
+    "citation_validity": 1.0,
+    "evidence_recall": 1.0,
+    "invalid_input_rejection": 1.0,
+    "urgent_escalation_accuracy": 1.0,
+    "review_recall": 1.0
+  },
+  "accepted": true,
+  "failures": [],
+  "mode": "mock",
+  "model": "local-keyword-baseline"
+}

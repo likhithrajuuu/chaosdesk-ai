@@ -1,0 +1,5 @@
+{
+  "ticket_id": "TKT-OUTAGE",
+  "subject": "Storage unavailable across tenants",
+  "description": "Production is blocked. Multiple organizations cannot access storage. No known workaround."
+}

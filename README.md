@@ -1,109 +1,211 @@
-# Build Challenge: ChaosDesk — An Autonomous AI Support Triage Agent
+# ChaosDesk
 
-Act as a senior AI engineer and challenge evaluator. Help me build **ChaosDesk**, a production-minded AI agent that autonomously processes customer-support tickets for a fictional SaaS company called CloudCrate.
+A terminal-based support triage agent for fictional SaaS company CloudCrate.
+It produces a validated JSON decision and a response draft. All escalations,
+incident creation, and billing actions are recommendations; nothing is sent or
+changed in a customer account.
 
-## 1. The Scenario
+## Quick start
 
-CloudCrate receives hundreds of tickets every hour. Some describe ordinary bugs, some indicate widespread outages, some involve billing disputes, and some contain incomplete or malicious instructions.
+Use Python 3.9+ and a virtual environment:
 
-Build an agent that accepts a ticket, searches a knowledge base, applies business policies, evaluates urgency, and produces an actionable triage decision.
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m chaosdesk --mode mock --ticket examples/ticket.json
+```
 
-## 2. Functional Requirements
+Mock mode uses a deterministic keyword baseline, needs no API key, and makes no
+network requests. It is a demonstration baseline with limited language coverage.
+The earlier single-ticket `MockInterpreter` remains available for focused tests.
 
-The agent must:
+For AI mode, put your key in the ignored local `.env` file:
 
-1. **Understand the ticket:** Extract the issue, affected service, customer impact, urgency indicators, and missing information.
-2. **Retrieve evidence:** Search a local knowledge base containing troubleshooting guides, incident reports, product documentation, and support policies. Return the most relevant evidence.
-3. **Classify the issue:** Assign a category such as BUG, BILLING, ACCESS, INCIDENT, or FEATURE_REQUEST.
-4. **Determine priority:** Assign P0, P1, P2, or P3 using explicit business rules. Widespread outages and critical service failures must outrank routine requests.
-5. **Recommend an action:** Choose from REQUEST_INFORMATION, SEND_KNOWN_FIX, ESCALATE_TO_ENGINEERING, ESCALATE_TO_BILLING, or CREATE_INCIDENT.
-6. **Explain the decision:** Provide a concise rationale grounded in the ticket, retrieved documents, and applicable policies.
-7. **Handle uncertainty:** If evidence is insufficient or conflicting, identify the uncertainty and request human review instead of inventing facts.
-8. **Resist prompt injection:** Treat ticket content and retrieved documents as untrusted data. Never allow instructions embedded in them to override system rules or authorize prohibited actions.
-9. **Produce valid structured output:** Return a schema-validated JSON object with consistent fields and enumerated values.
-10. **Maintain reliability:** Handle malformed inputs, empty tickets, retrieval failures, model timeouts, and invalid model responses gracefully.
+```text
+OPENAI_API_KEY=your-key-here
+OPENAI_MODEL=gpt-4.1-mini
+```
 
-## 3. Example Output Contract
+```bash
+python -m chaosdesk --mode ai --ticket examples/ticket.json
+```
 
-Every ticket must produce an object containing:
+AI mode sends the ticket to OpenAI and uses your API account. The default model
+matches the original project setup; `--model` overrides it. Each ticket uses one
+structured extraction request, a 30-second request timeout, and no automatic
+retries. Knowledge-base articles are processed locally, outside the model prompt.
 
-- ticket_id
-- category
-- priority
-- confidence
-- customer_impact
-- evidence: list of document IDs and supporting excerpts
-- recommended_action
-- response_draft
-- reasoning_summary
-- missing_information
-- requires_human_review
+The CLI also reads one JSON ticket from stdin:
 
-Confidence must not be treated as proof of correctness. Do not invent evidence or claim that a tool succeeded when it failed.
+```bash
+cat examples/ticket.json | python -m chaosdesk
+```
 
-## 4. Tooling Requirements
+`python main.py` invokes the same CLI. Use `--kb-dir PATH` to select a knowledge
+base and `--verbose` for logs on stderr. Logs contain event names, priorities,
+actions, and review flags, without raw tickets or provider error details.
 
-Implement separate, testable tools for:
+## Ticket and result contracts
 
-- Knowledge-base retrieval
-- Policy evaluation
-- Ticket classification
-- Priority determination
-- Response generation
-- Output validation
+Input is a JSON object with exactly three nonblank string fields:
 
-Keep deterministic rules separate from LLM-generated reasoning. The LLM may interpret ambiguous language, but critical escalation rules must be enforced by code.
+```json
+{
+  "ticket_id": "TKT-001",
+  "subject": "Forgot password",
+  "description": "I need help resetting my password."
+}
+```
 
-Do not introduce unnecessary agents, frameworks, or microservices. Start with one agent and clearly defined tools.
+Results include `ticket_id`, nullable `category`, `priority`, `confidence`,
+`customer_impact`, `evidence`, `recommended_action`, `response_draft`,
+`reasoning_summary`, `missing_information`, and `requires_human_review`.
+Evidence contains literal excerpts from retrieved documents. Unknown categories
+remain null. Unknown impact facts stay null and trigger review.
 
-## 5. Evaluation Scenarios
+Malformed or empty input produces a JSON error envelope instead of a fabricated
+triage decision. Exit codes are 0 for a completed decision (including a decision
+requiring review), 2 for input/configuration errors, and 1 for an unrecoverable
+processing failure. Errors do not include raw input or provider exception text.
 
-Create a local test dataset containing at least 30 tickets, including:
+## How it works
 
-- A routine password-reset request
-- A billing dispute with missing transaction details
-- A single-user bug with a documented workaround
-- A production outage affecting hundreds of customers
-- Two tickets that describe the same underlying incident differently
-- Conflicting or outdated knowledge-base articles
-- A vague ticket with insufficient evidence
-- A ticket containing prompt-injection instructions
-- An empty or malformed ticket
-- A ticket for which no relevant documentation exists
+```text
+Ticket validation
+  -> LocalAnalyzer or AIAnalyzer: category, reported impact, impact facts
+  -> local retrieval: candidate documents
+  -> document status, scope, and suspicious-content checks
+  -> deterministic priority and action policies
+  -> reviewed response templates
+  -> output schema and citation validation
+```
 
-Add adversarial and boundary cases beyond these examples.
+| File | Responsibility |
+|---|---|
+| `chaosdesk/schemas.py` | Input, analysis, and final decision contracts |
+| `chaosdesk/analysis.py` | Offline baseline and structured AI extraction |
+| `chaosdesk/interpreter.py` | Earlier priority-only interpreter interface and implementations |
+| `chaosdesk/retrieval.py` | Deterministic local article ranking |
+| `chaosdesk/policies.py` | Priority, action routing, and rule explanations |
+| `chaosdesk/triage.py` | End-to-end coordination and document scope checks |
+| `chaosdesk/responses.py` | Reviewed response draft templates |
+| `chaosdesk/validation.py` | Schema, ticket identity, and citation checks |
+| `chaosdesk/cli.py` | JSON terminal interface |
+| `chaosdesk/evaluate.py` | Repeatable labeled evaluation |
 
-## 6. Testing and Evaluation
+P0 requires reported critical-service unavailability across multiple independent
+organizations. P1 requires a blocked critical production workflow without a
+confirmed usable workaround. Disruption otherwise produces P2. Routine requests
+with no disruption produce P3. Unknown impact defaults to provisional P2.
 
-Build automated tests that measure:
+P0 recommends incident investigation, and P1 recommends engineering review even
+when evidence is unavailable. These priorities always require human review.
+Billing cases need a transaction/invoice ID, amount, and date before billing
+routing. Otherwise they request information. Unknown categories, unavailable
+supporting documentation, and unsafe or outdated documents trigger review.
 
-- Category classification accuracy
-- Priority classification accuracy
-- Correct escalation decisions
-- Evidence relevance and citation validity
-- JSON schema validity
-- Prompt-injection resistance
-- Graceful failure handling
-- Deterministic policy enforcement
+Known fixes are restricted to reviewed password-reset and Safari-button
+procedures with exact supporting excerpts and matching ticket scope. Retrieval
+score alone cannot authorize a fix. A failed Safari workaround is not sent again.
+New document IDs require a scope rule in `document_applies` before they can
+support a decision; new fixes also require an entry in `select_known_fix`.
+Unreviewed matching documents are conservatively flagged for review. This also
+prevents conflicting additional articles from silently authorizing a fix.
 
-Define measurable acceptance criteria before optimizing the system. Report results using a repeatable evaluation script rather than a few handpicked examples.
+AI failures yield a review-required decision with unknown impact. A narrow local
+symptom check preserves clearly recognized P0/P1 reports as provisional urgent
+escalations. Retrieval failures preserve severity, remove evidence, and flag
+review. No model response directly sets priority or authorizes external actions.
 
-## 7. Engineering Constraints
+## Tests and evaluation
 
-- Provide a terminal-based interface.
-- Use a clean, modular architecture.
-- Keep configuration and secrets outside source code.
-- Support a local mock mode so the project works without a paid LLM API.
-- Include sample tickets, sample knowledge-base documents, automated tests, and a README.
-- Log decisions and tool failures without exposing secrets or unnecessary personal data.
-- Never send real customer communications or perform destructive actions automatically.
+```bash
+python -m pytest -q
+python -m chaosdesk.evaluate
+```
 
-## 8. How We Will Build It
+`data/evaluation.json` contains labeled routine, urgent, ambiguous, billing,
+malformed, injection, workaround, outdated/conflicting-document, and retrieval
+failure cases. `data/acceptance.json` defines acceptance thresholds. Evaluation
+prints scores, denominators, thresholds, and failing case names, and exits with
+status 1 when a threshold is missed. Tests also inject timeouts, invalid model
+responses, unsafe documents, fabricated citations, and tool failures.
 
-Work incrementally.
+To evaluate the real model, explicitly run:
 
-First, give me the requirements and a proposed architecture. Then let me implement each component myself, reviewing my design choices and tests before moving on.
+```bash
+python -m chaosdesk.evaluate --mode ai
+```
 
-Do not generate the entire codebase immediately. Challenge my assumptions, introduce realistic edge cases, and ask me to justify important engineering decisions.
+This makes paid API requests for valid tickets. Offline results measure the local
+keyword baseline and deterministic pipeline, not real-model quality. The small
+fixture set is a regression suite, not a representative production benchmark.
+Evidence recall is measured only on cases with explicitly labeled source IDs;
+citation validity checks provenance, not semantic truth.
 
-The final goal is to build a small but reliable AI agent that can be explained, tested, and defended in a technical interview.
+## Harnesses
+
+Run all three offline harnesses and save a JSON report:
+
+```bash
+python -m chaosdesk.harness all --output reports/harness.json
+```
+
+| Harness | What it checks |
+|---|---|
+| `regression` | Existing labeled evaluation against acceptance thresholds |
+| `replay` | Expected outcomes, schema/citation validity, and identical full decisions across repeated runs |
+| `faults` | Safe degradation under analyzer timeouts, invalid analysis, retrieval errors, empty retrieval, unsafe documents, and combined failures |
+
+Run individual harnesses:
+
+```bash
+python -m chaosdesk.harness regression
+python -m chaosdesk.harness replay --repeat 3
+python -m chaosdesk.harness faults
+```
+
+Replay accepts `--dataset PATH` using the same case format as
+`data/evaluation.json`. It checks every provided expectation, including review
+flags and required evidence IDs, rather than using aggregate accuracy thresholds.
+Invalid tickets must explicitly have `"invalid": true`. Duplicate case names,
+unknown expectations, and invalid expectation types are configuration errors.
+An empty dataset cannot pass. Regression still requires coverage of all metrics
+in the acceptance file, so a small custom dataset may fail its coverage gates.
+
+The fault harness runs six failure modes against three ticket types: widespread
+outage, production blockage, and routine assistance. It checks that urgent cases
+retain their escalation, all degraded decisions require review, and unavailable
+or unsafe sources do not produce evidence. Analyzer failure on routine tickets
+must produce unknown-impact P2 rather than an invented routine classification.
+
+Reports show per-case outcomes, tool calls, handled tool errors, elapsed
+milliseconds, and replay p50/p95 latency (nearest-rank). Repeated decisions are
+compared in full, excluding timing data. Timing is diagnostic and has no pass
+threshold. Traces omit ticket IDs, ticket text, response drafts, retrieved text,
+and exception details; case names should be non-sensitive labels.
+
+Exit codes: 0 means all selected harnesses passed, 1 means checks failed, and 2
+means dataset configuration or report writing failed. Reports are printed as JSON
+on stdout and optionally saved with `--output`; tool diagnostics use stderr.
+The harness CLI is entirely offline. Use the existing
+`python -m chaosdesk.evaluate --mode ai` separately for paid real-model evaluation.
+
+## Current limits
+
+The offline baseline uses keyword rules and can misread negation, paraphrases,
+and complex scope statements. It is not suitable for unattended production use.
+The model can also misinterpret symptoms even when its JSON is valid. The fixed
+confidence values (0.6 normally, 0.2 when tool/evidence concerns arise) are
+uncalibrated conservative indicators, not measured probabilities.
+
+Ticket instructions stay in a separate untrusted message. Retrieved documents
+never enter the model prompt or directly supply response text. Suspicious-content
+checks and reviewed templates add containment, but the regex checks do not prove
+prompt-injection resistance. Real-model adversarial evaluation, a broader held-out
+dataset, stronger retrieval, and operational monitoring remain necessary before
+production deployment. Articles are checked for explicit current status; there is
+no automatic date-based expiration or arbitrary semantic contradiction detector.
+
+The original requirements are retained in [docs/build-challenge.md](docs/build-challenge.md).
