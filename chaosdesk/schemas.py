@@ -97,4 +97,4 @@ class PriorityAssessment(BaseModel):
 
     priority: Priority
     missing_information: List[str]
-    requires_human_review: bool
+    requires_human_review: Optional[bool]
